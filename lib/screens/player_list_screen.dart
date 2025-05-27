@@ -5,6 +5,8 @@ import 'package:csv/csv.dart';
 import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:excel/excel.dart';
+
 
 import '../models/player.dart';
 
@@ -82,24 +84,28 @@ class _PlayerListScreenState extends State<PlayerListScreen> {
     return events.join(', ');
   }
 
-  Future<void> _exportCsv() async {
-  List<List<String>> rows = [
-    ['Nombre', 'Goles (minutos)', 'Tarjeta Amarilla', 'Tarjeta Roja', 'Minuto Cambio']
-  ];
+  Future<void> _exportExcel() async {
+  final excel = Excel.createExcel();
+  final sheet = excel['Informe'];
 
+  // Añadir encabezados
+  final headers = ['Nombre', 'Goles (minutos)', 'Tarjeta Amarilla', 'Tarjeta Roja', 'Minuto Cambio'];
+  sheet.appendRow(headers);
+
+  // Añadir datos
   for (var player in widget.players) {
-    rows.add([
+    final row = [
       player.name,
       player.goalMinutes.map((m) => m.toString()).join('-'),
       player.hasYellowCard ? 'Si' : 'No',
       player.hasRedCard ? 'Si' : 'No',
       player.substitutedMinute?.toString() ?? '',
-    ]);
+    ];
+    sheet.appendRow(row);
   }
 
-  final csvData = const ListToCsvConverter(fieldDelimiter: '|').convert(rows);
-
-  final status = await Permission.manageExternalStorage.request(); // asegúrate de usar este permiso
+  // Solicitar permiso (igual que antes)
+  final status = await Permission.manageExternalStorage.request();
 
   if (!status.isGranted) {
     ScaffoldMessenger.of(context).showSnackBar(
@@ -109,11 +115,19 @@ class _PlayerListScreenState extends State<PlayerListScreen> {
   }
 
   final directory = Directory('/storage/emulated/0/Documents');
-  final filename = 'informe_partido_${DateTime.now().millisecondsSinceEpoch}.csv';
+  final filename = 'informe_partido_${DateTime.now().millisecondsSinceEpoch}.xlsx';
   final path = '${directory.path}/$filename';
 
+  final fileBytes = excel.encode();
+  if (fileBytes == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Error al generar el archivo Excel')),
+    );
+    return;
+  }
+
   final file = File(path);
-  await file.writeAsString(csvData);
+  await file.writeAsBytes(fileBytes);
 
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(content: Text('Informe guardado en: $path')),
@@ -280,7 +294,7 @@ class _PlayerListScreenState extends State<PlayerListScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.download, color: Colors.white),
-            onPressed: _exportCsv,
+            onPressed: _exportExcel,
           ),
         ],
       ),
